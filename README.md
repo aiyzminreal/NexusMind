@@ -4,6 +4,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 First, run the development server:
 
+cd "d:\lax\VSCode Data\NexusMind\nexusmind"
+
 ```bash
 npm run dev
 # or
