@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import { GitMerge, Zap, RotateCcw, Copy, Check } from "lucide-react";
 import StreamingOutput from "@/components/StreamingOutput";
 import LoadingDots from "@/components/LoadingDots";
 import { cn } from "@/lib/utils";
+import { useSessionState } from "@/lib/useSessionState";
 
 const SPAN_LABELS: Record<number, { label: string; example: string }> = {
   1: { label: "同细分领域", example: "React → Vue" },
@@ -20,12 +21,12 @@ const SPAN_LABELS: Record<number, { label: string; example: string }> = {
 };
 
 export default function ColliderPage() {
-  const [domain, setDomain] = useState("");
-  const [problem, setProblem] = useState("");
-  const [crossSpan, setCrossSpan] = useState(5);
-  const [output, setOutput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [domain, setDomain] = useSessionState("collider_domain", "");
+  const [problem, setProblem] = useSessionState("collider_problem", "");
+  const [crossSpan, setCrossSpan] = useSessionState("collider_span", 5);
+  const [output, setOutput] = useSessionState("collider_output", "");
+  const [isLoading, setIsLoading] = useSessionState("collider_loading", false);
+  const [copied, setCopied] = useSessionState("collider_copied", false);
   const abortRef = useRef<AbortController | null>(null);
 
   const handleCollide = async () => {

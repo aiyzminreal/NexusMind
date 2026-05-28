@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { Cpu, FileCode, Layers, Database, Copy, Check, RotateCcw } from "lucide-react";
 import StreamingOutput from "@/components/StreamingOutput";
 import LoadingDots from "@/components/LoadingDots";
 import { cn } from "@/lib/utils";
+import { useSessionState } from "@/lib/useSessionState";
 
 type TabType = "overview" | "prompt" | "stack" | "mockdata";
 
@@ -16,13 +16,13 @@ const TABS: { id: TabType; label: string; icon: React.ElementType; desc: string 
 ];
 
 export default function MVAPage() {
-  const [idea, setIdea] = useState("");
-  const [domain, setDomain] = useState("");
-  const [targetUser, setTargetUser] = useState("");
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
-  const [outputs, setOutputs] = useState<Partial<Record<TabType, string>>>({});
-  const [loadingTab, setLoadingTab] = useState<TabType | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [idea, setIdea] = useSessionState("mva_idea", "");
+  const [domain, setDomain] = useSessionState("mva_domain", "");
+  const [targetUser, setTargetUser] = useSessionState("mva_targetUser", "");
+  const [activeTab, setActiveTab] = useSessionState<TabType>("mva_activeTab", "overview");
+  const [outputs, setOutputs] = useSessionState<Partial<Record<TabType, string>>>("mva_outputs", {});
+  const [loadingTab, setLoadingTab] = useSessionState<TabType | null>("mva_loadingTab", null);
+  const [copied, setCopied] = useSessionState("mva_copied", false);
 
   const handleGenerate = async (type: TabType) => {
     if (!idea.trim() || loadingTab) return;

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Shield, Zap, RotateCcw } from "lucide-react";
+import { Shield, RotateCcw } from "lucide-react";
 import StreamingOutput from "@/components/StreamingOutput";
 import LoadingDots from "@/components/LoadingDots";
 import { cn } from "@/lib/utils";
+import { useSessionState } from "@/lib/useSessionState";
 
 interface HatResult {
   hat: string;
@@ -33,11 +33,11 @@ const HAT_TEXT: Record<string, string> = {
 };
 
 export default function StressTestPage() {
-  const [idea, setIdea] = useState("");
-  const [context, setContext] = useState("");
-  const [results, setResults] = useState<HatResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeHat, setActiveHat] = useState<string | null>(null);
+  const [idea, setIdea] = useSessionState("stress_idea", "");
+  const [context, setContext] = useSessionState("stress_context", "");
+  const [results, setResults] = useSessionState<HatResult[]>("stress_results", []);
+  const [isLoading, setIsLoading] = useSessionState("stress_loading", false);
+  const [activeHat, setActiveHat] = useSessionState<string | null>("stress_activeHat", null);
 
   const handleTest = async () => {
     if (!idea.trim() || isLoading) return;

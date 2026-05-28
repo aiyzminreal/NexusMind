@@ -1,62 +1,180 @@
 "use client";
 
-import { useState } from "react";
-import { Users, Lock, Shield, Lightbulb, Tag, Send, Eye } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import {
+  Users,
+  Lock,
+  Shield,
+  Lightbulb,
+  Tag,
+  Send,
+  Eye,
+  MessageSquare,
+  X,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// 模拟社区数据（实际接入 Supabase 后替换）
-const MOCK_IDEAS = [
-  {
-    id: "1",
-    core: "将量子纠错码的冗余编码思想应用于分布式数据库的容错机制",
-    tags: ["量子计算", "分布式系统", "容错"],
-    domain: "计算机科学 × 量子物理",
-    reviews: 7,
-    timestamp: "2026-05-24",
-    certified: true,
-  },
-  {
-    id: "2",
-    core: "用生态系统中的捕食者-猎物动力学模型来优化广告竞价策略",
-    tags: ["生态学", "广告技术", "博弈论"],
-    domain: "生物学 × 商业策略",
-    reviews: 12,
-    timestamp: "2026-05-23",
-    certified: true,
-  },
-  {
-    id: "3",
-    core: "借鉴免疫系统的自适应识别机制设计网络安全异常检测系统",
-    tags: ["免疫学", "网络安全", "自适应系统"],
-    domain: "生物学 × 信息安全",
-    reviews: 5,
-    timestamp: "2026-05-22",
-    certified: false,
-  },
-  {
-    id: "4",
-    core: "将城市交通流量的元胞自动机模型迁移到社交网络信息传播预测",
-    tags: ["复杂系统", "社交网络", "传播动力学"],
-    domain: "交通工程 × 社会计算",
-    reviews: 9,
-    timestamp: "2026-05-21",
-    certified: true,
-  },
-];
+interface Idea {
+  id: string;
+  core_logic: string;
+  tags: string[];
+  domain_cross: string | null;
+  cert_id: string;
+  reviews_count: number;
+  created_at: string;
+}
+
+interface Review {
+  id: string;
+  reviewer_domain: string;
+  content: string;
+  created_at: string;
+}
+
+interface PublishResult {
+  id: string;
+  cert_id: string;
+  cert_hash: string;
+  created_at: string;
+}
 
 export default function CommunityPage() {
   const [activeTab, setActiveTab] = useState<"browse" | "publish">("browse");
+
+  // 浏览状态
+  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loadingIdeas, setLoadingIdeas] = useState(false);
+  const [ideasError, setIdeasError] = useState("");
+
+  // 评议弹窗状态
+  const [reviewingIdea, setReviewingIdea] = useState<Idea | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [reviewContent, setReviewContent] = useState("");
+  const [reviewerDomain, setReviewerDomain] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewSuccess, setReviewSuccess] = useState(false);
+
+  // 发布状态
   const [idea, setIdea] = useState("");
   const [tags, setTags] = useState("");
   const [domain, setDomain] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [certId] = useState(
-    () => `NM-${Date.now().toString(36).toUpperCase()}`
-  );
+  const [submitting, setSubmitting] = useState(false);
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
+  const [publishError, setPublishError] = useState("");
 
-  const handlePublish = () => {
+  const pageSize = 10;
+  const totalPages = Math.ceil(total / pageSize);
+
+  // 加载点子列表
+  const loadIdeas = useCallback(async (p: number) => {
+    setLoadingIdeas(true);
+    setIdeasError("");
+    try {
+      const res = await fetch(`/api/community?page=${p}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "加载失败");
+      setIdeas(data.ideas || []);
+      setTotal(data.total || 0);
+    } catch (e) {
+      setIdeasError(e instanceof Error ? e.message : "加载失败");
+    } finally {
+      setLoadingIdeas(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "browse") {
+      loadIdeas(page);
+    }
+  }, [activeTab, page, loadIdeas]);
+
+  // 打开评议弹窗
+  const openReviews = async (idea: Idea) => {
+    setReviewingIdea(idea);
+    setReviews([]);
+    setReviewContent("");
+    setReviewerDomain("");
+    setReviewSuccess(false);
+    setLoadingReviews(true);
+    try {
+      const res = await fetch(`/api/community/reviews?idea_id=${idea.id}`);
+      const data = await res.json();
+      setReviews(data.reviews || []);
+    } catch {
+      // 静默失败
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+
+  // 提交评议
+  const submitReview = async () => {
+    if (!reviewContent.trim() || !reviewingIdea) return;
+    setSubmittingReview(true);
+    try {
+      const res = await fetch("/api/community/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idea_id: reviewingIdea.id,
+          reviewer_domain: reviewerDomain,
+          content: reviewContent,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error);
+      }
+      setReviewSuccess(true);
+      setReviewContent("");
+      // 刷新评议列表
+      const res2 = await fetch(`/api/community/reviews?idea_id=${reviewingIdea.id}`);
+      const data2 = await res2.json();
+      setReviews(data2.reviews || []);
+      // 更新列表中的评议数
+      setIdeas((prev) =>
+        prev.map((i) =>
+          i.id === reviewingIdea.id
+            ? { ...i, reviews_count: i.reviews_count + 1 }
+            : i
+        )
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "提交失败");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  // 发布点子
+  const handlePublish = async () => {
     if (!idea.trim()) return;
-    setSubmitted(true);
+    setSubmitting(true);
+    setPublishError("");
+    try {
+      const res = await fetch("/api/community", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          core_logic: idea,
+          tags,
+          domain_cross: domain,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "发布失败");
+      setPublishResult(data);
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : "发布失败");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -104,10 +222,7 @@ export default function CommunityPage() {
           ].map((item) => {
             const Icon = item.icon;
             return (
-              <div
-                key={item.title}
-                className={cn("card p-4 border", item.bg)}
-              >
+              <div key={item.title} className={cn("card p-4 border", item.bg)}>
                 <Icon className={cn("w-5 h-5 mb-2", item.color)} />
                 <div className="font-medium text-gray-200 text-sm mb-1">
                   {item.title}
@@ -144,12 +259,43 @@ export default function CommunityPage() {
         {/* Browse Tab */}
         {activeTab === "browse" && (
           <div className="space-y-4">
-            <p className="text-gray-600 text-xs">
-              以下为去隐私化处理后的创意核心逻辑，身份信息已隐去
-            </p>
-            {MOCK_IDEAS.map((idea) => (
+            <div className="flex items-center justify-between">
+              <p className="text-gray-600 text-xs">
+                以下为去隐私化处理后的创意核心逻辑，身份信息已隐去
+                {total > 0 && (
+                  <span className="ml-2 text-gray-500">共 {total} 条</span>
+                )}
+              </p>
+              <button
+                onClick={() => loadIdeas(page)}
+                className="p-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-white/5 transition-all"
+                title="刷新"
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", loadingIdeas && "animate-spin")} />
+              </button>
+            </div>
+
+            {loadingIdeas && (
+              <div className="text-center py-12 text-gray-500 text-sm">
+                加载中...
+              </div>
+            )}
+
+            {ideasError && (
+              <div className="card p-4 border border-red-500/20 bg-red-500/5 text-red-400 text-sm">
+                ❌ {ideasError}
+              </div>
+            )}
+
+            {!loadingIdeas && !ideasError && ideas.length === 0 && (
+              <div className="text-center py-12 text-gray-500 text-sm">
+                还没有点子，来发布第一个吧 →
+              </div>
+            )}
+
+            {ideas.map((item) => (
               <div
-                key={idea.id}
+                key={item.id}
                 className="card p-5 hover:border-pink-500/20 transition-all"
               >
                 <div className="flex items-start justify-between gap-4">
@@ -157,58 +303,81 @@ export default function CommunityPage() {
                     <div className="flex items-center gap-2 mb-2">
                       <Lightbulb className="w-4 h-4 text-yellow-400 flex-shrink-0" />
                       <span className="text-gray-300 text-sm font-medium leading-relaxed">
-                        {idea.core}
+                        {item.core_logic}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-gray-600">
-                      <span className="text-purple-400">{idea.domain}</span>
-                      <span>·</span>
-                      <span>{idea.reviews} 人评议</span>
-                      <span>·</span>
-                      <span>{idea.timestamp}</span>
-                      {idea.certified && (
+                    <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
+                      {item.domain_cross && (
                         <>
+                          <span className="text-purple-400">{item.domain_cross}</span>
                           <span>·</span>
-                          <span className="text-green-400 flex items-center gap-1">
-                            <Shield className="w-3 h-3" />
-                            已确权
-                          </span>
                         </>
                       )}
+                      <span>{item.reviews_count} 人评议</span>
+                      <span>·</span>
+                      <span>{new Date(item.created_at).toLocaleDateString("zh-CN")}</span>
+                      <span>·</span>
+                      <span className="text-green-400 flex items-center gap-1">
+                        <Shield className="w-3 h-3" />
+                        已确权 {item.cert_id}
+                      </span>
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {idea.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-2 py-0.5 rounded-full bg-[#1e1e2e] text-gray-500 text-xs flex items-center gap-1"
-                    >
-                      <Tag className="w-2.5 h-2.5" />
-                      {tag}
-                    </span>
-                  ))}
-                </div>
+                {item.tags && item.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {item.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 rounded-full bg-[#1e1e2e] text-gray-500 text-xs flex items-center gap-1"
+                      >
+                        <Tag className="w-2.5 h-2.5" />
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-3 flex gap-2">
-                  <button className="px-3 py-1.5 rounded-lg border border-[#1e1e2e] text-gray-500 hover:text-gray-300 hover:border-pink-500/30 transition-all text-xs">
+                  <button
+                    onClick={() => openReviews(item)}
+                    className="px-3 py-1.5 rounded-lg border border-[#1e1e2e] text-gray-500 hover:text-gray-300 hover:border-pink-500/30 transition-all text-xs flex items-center gap-1.5"
+                  >
+                    <MessageSquare className="w-3 h-3" />
                     参与评议
-                  </button>
-                  <button className="px-3 py-1.5 rounded-lg border border-[#1e1e2e] text-gray-500 hover:text-gray-300 hover:border-purple-500/30 transition-all text-xs">
-                    发起合伙请求
                   </button>
                 </div>
               </div>
             ))}
-            <div className="text-center py-6 text-gray-600 text-sm">
-              社区功能完整版需连接 Supabase 数据库后启用
-            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 pt-4">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-2 rounded-lg border border-[#1e1e2e] text-gray-500 hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-gray-500 text-sm">
+                  {page} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-2 rounded-lg border border-[#1e1e2e] text-gray-500 hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         )}
 
         {/* Publish Tab */}
         {activeTab === "publish" && (
           <div className="max-w-2xl">
-            {submitted ? (
+            {publishResult ? (
               <div className="card p-8 text-center animate-slide-up">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-600/20 to-emerald-500/20 border border-green-500/20 flex items-center justify-center mx-auto mb-4">
                   <Shield className="w-8 h-8 text-green-400" />
@@ -219,32 +388,48 @@ export default function CommunityPage() {
                 <p className="text-gray-500 text-sm mb-6">
                   你的创意已完成去隐私化处理并发布到社区
                 </p>
-                <div className="bg-[#0a0a0f] border border-green-500/20 rounded-xl p-4 mb-6">
+                <div className="bg-[#0a0a0f] border border-green-500/20 rounded-xl p-4 mb-6 text-left">
                   <div className="text-xs text-gray-500 mb-1">确权证书 ID</div>
-                  <div className="font-mono text-green-400 text-lg font-bold">
-                    {certId}
+                  <div className="font-mono text-green-400 text-lg font-bold break-all">
+                    {publishResult.cert_id}
                   </div>
                   <div className="text-xs text-gray-600 mt-2">
-                    时间戳：{new Date().toISOString()}
+                    时间戳：{new Date(publishResult.created_at).toISOString()}
                   </div>
-                  <div className="text-xs text-gray-600">
-                    哈希：{Math.random().toString(36).slice(2, 18).toUpperCase()}
+                  <div className="text-xs text-gray-600 mt-1">
+                    哈希：{publishResult.cert_hash}
                   </div>
                 </div>
                 <p className="text-gray-600 text-xs mb-4">
                   请保存此证书 ID，它是你创意优先权的唯一凭证
                 </p>
-                <button
-                  onClick={() => {
-                    setSubmitted(false);
-                    setIdea("");
-                    setTags("");
-                    setDomain("");
-                  }}
-                  className="px-6 py-2.5 rounded-xl border border-[#1e1e2e] text-gray-400 hover:text-gray-200 hover:border-pink-500/30 transition-all text-sm"
-                >
-                  发布新点子
-                </button>
+                <div className="flex gap-3 justify-center">
+                  <button
+                    onClick={() => {
+                      setPublishResult(null);
+                      setIdea("");
+                      setTags("");
+                      setDomain("");
+                    }}
+                    className="px-6 py-2.5 rounded-xl border border-[#1e1e2e] text-gray-400 hover:text-gray-200 hover:border-pink-500/30 transition-all text-sm"
+                  >
+                    发布新点子
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPublishResult(null);
+                      setIdea("");
+                      setTags("");
+                      setDomain("");
+                      setActiveTab("browse");
+                      setPage(1);
+                      loadIdeas(1);
+                    }}
+                    className="px-6 py-2.5 rounded-xl bg-pink-600/20 text-pink-300 border border-pink-500/30 hover:bg-pink-600/30 transition-all text-sm"
+                  >
+                    查看社区
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-5">
@@ -295,24 +480,116 @@ export default function CommunityPage() {
                   </div>
                 </div>
 
+                {publishError && (
+                  <div className="card p-3 border border-red-500/20 bg-red-500/5 text-red-400 text-sm">
+                    ❌ {publishError}
+                  </div>
+                )}
+
                 <button
                   onClick={handlePublish}
-                  disabled={!idea.trim()}
+                  disabled={!idea.trim() || submitting}
                   className={cn(
                     "w-full py-4 rounded-xl font-semibold text-white transition-all flex items-center justify-center gap-2",
-                    idea.trim()
+                    idea.trim() && !submitting
                       ? "bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500"
                       : "bg-[#1e1e2e] text-gray-600 cursor-not-allowed"
                   )}
                 >
                   <Send className="w-5 h-5" />
-                  去隐私化发布 + 生成确权证书
+                  {submitting ? "发布中..." : "去隐私化发布 + 生成确权证书"}
                 </button>
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* 评议弹窗 */}
+      {reviewingIdea && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="card w-full max-w-lg max-h-[80vh] flex flex-col border border-pink-500/20 animate-slide-up">
+            {/* 弹窗头部 */}
+            <div className="flex items-start justify-between p-5 border-b border-[#1e1e2e]">
+              <div className="flex-1 pr-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <MessageSquare className="w-4 h-4 text-pink-400" />
+                  <span className="text-sm font-medium text-gray-200">参与评议</span>
+                </div>
+                <p className="text-xs text-gray-500 line-clamp-2">
+                  {reviewingIdea.core_logic}
+                </p>
+              </div>
+              <button
+                onClick={() => setReviewingIdea(null)}
+                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-all flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 已有评议 */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              {loadingReviews && (
+                <p className="text-gray-500 text-sm text-center py-4">加载评议中...</p>
+              )}
+              {!loadingReviews && reviews.length === 0 && (
+                <p className="text-gray-600 text-sm text-center py-4">
+                  还没有评议，来第一个发表看法吧
+                </p>
+              )}
+              {reviews.map((r) => (
+                <div key={r.id} className="bg-[#0a0a0f] rounded-lg p-3 border border-[#1e1e2e]">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-purple-400 font-medium">
+                      {r.reviewer_domain || "匿名"}
+                    </span>
+                    <span className="text-xs text-gray-600">
+                      {new Date(r.created_at).toLocaleDateString("zh-CN")}
+                    </span>
+                  </div>
+                  <p className="text-gray-300 text-sm leading-relaxed">{r.content}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* 提交评议 */}
+            <div className="p-5 border-t border-[#1e1e2e] space-y-3">
+              {reviewSuccess && (
+                <p className="text-green-400 text-xs text-center">✓ 评议已提交</p>
+              )}
+              <input
+                type="text"
+                value={reviewerDomain}
+                onChange={(e) => setReviewerDomain(e.target.value)}
+                placeholder="你的领域（可选，如：机器学习研究者）"
+                className="w-full bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-pink-500/50 text-sm"
+              />
+              <div className="flex gap-2">
+                <textarea
+                  value={reviewContent}
+                  onChange={(e) => setReviewContent(e.target.value)}
+                  placeholder="写下你的评议..."
+                  className="flex-1 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-pink-500/50 resize-none text-sm"
+                  rows={2}
+                />
+                <button
+                  onClick={submitReview}
+                  disabled={!reviewContent.trim() || submittingReview}
+                  className={cn(
+                    "px-4 rounded-lg font-medium text-sm transition-all flex-shrink-0",
+                    reviewContent.trim() && !submittingReview
+                      ? "bg-pink-600 text-white hover:bg-pink-500"
+                      : "bg-[#1e1e2e] text-gray-600 cursor-not-allowed"
+                  )}
+                >
+                  {submittingReview ? "..." : <Send className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

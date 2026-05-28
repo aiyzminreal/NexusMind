@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { Languages, ArrowRight, Copy, Check, RotateCcw } from "lucide-react";
 import StreamingOutput from "@/components/StreamingOutput";
 import LoadingDots from "@/components/LoadingDots";
 import { cn } from "@/lib/utils";
+import { useSessionState } from "@/lib/useSessionState";
 
 type Direction = "tech-to-scene" | "scene-to-tech";
 
@@ -40,11 +40,11 @@ const DIRECTIONS = [
 ];
 
 export default function TranslatorPage() {
-  const [direction, setDirection] = useState<Direction>("tech-to-scene");
-  const [input, setInput] = useState("");
-  const [output, setOutput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [direction, setDirection] = useSessionState<Direction>("translator_direction", "tech-to-scene");
+  const [input, setInput] = useSessionState("translator_input", "");
+  const [output, setOutput] = useSessionState("translator_output", "");
+  const [isLoading, setIsLoading] = useSessionState("translator_loading", false);
+  const [copied, setCopied] = useSessionState("translator_copied", false);
 
   const currentDir = DIRECTIONS.find((d) => d.id === direction)!;
 
